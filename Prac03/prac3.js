@@ -196,9 +196,67 @@ function drawBezier( p0, p1, p2, p3) {
       putPixel(Math.round(x), Math.round(y), pointColor);
       pre = [Math.round(x), Math.round(y)];
     }
-
   }  
   putPixel(p3.x, p3.y, controlPointsColor);
+}
+
+
+// draw for 3 control points
+function drawBezier2( p0, p1, p2) {
+
+  // calc initial value
+  var A0x = p0.x - 2 * p1.x + p2.x;
+  var A1x = -2 * (p0.x - p1.x);
+    
+  var A0y = p0.y - 2 * p1.y + p2.y;
+  var A1y = -2 * (p0.y - p1.y);
+  
+  var Mx = 3*Math.abs(A0x) + Math.abs(A1x);
+  var My = 3*Math.abs(A0y) + Math.abs(A1y);
+
+  var Dt = Math.pow(Math.max(Mx, My), -1);
+  
+  var Dx = A0x * Math.pow(Dt, 2) + A1x * Dt;
+  var Ddx = 2 * A0x * Math.pow(Dt, 2);
+  
+  var Dy = A0y * Math.pow(Dt, 2) + A1y * Dt;
+  var Ddy = 2 * A0y * Math.pow(Dt, 2);
+
+  console.log("D: ",Dx, Ddx, Dy, Ddy);
+
+  // calc step
+  var steps = Math.round(1/Dt);
+  console.log(steps)
+
+  var x = p0.x;
+  var y = p0.y;
+
+  // plot first point
+  putPixel(x,y, pointColor);
+
+  // sai phan tien 
+  // x += Dx;
+  // y += Dy;
+  putPixel(Math.round(x), Math.round(y), pointColor);
+  
+  var pre = [Math.round(x), Math.round(y)]
+  for(let i=2; i<=steps; i++) {
+    x += Dx;
+    y += Dy;
+    
+    Dx += Ddx;
+
+    Dy += Ddy;
+
+    // han che viec ve lai cac diem da co tren luoi toa do
+    if(pre[0] == Math.round(x) && pre[1] ==  Math.round(y)) {
+      continue;
+    } else {
+      putPixel(Math.round(x), Math.round(y), pointColor);
+      pre = [Math.round(x), Math.round(y)];
+    }
+  }  
+  putPixel(p2.x, p2.y, pointColor);
 }
 
 // var times = 1;
@@ -219,11 +277,11 @@ function main() {
     [preX,preY] = [curX,curY] ;
 
     // enough required points
-    if(controlPoints.length==4) {
+    if(controlPoints.length==3) {
       for(let i=0; i<controlPoints.length; i++){
         putPixel(controlPoints[i].x,controlPoints[i].y,controlPointsColor);
       }
-      drawBezier(controlPoints[0], controlPoints[1], controlPoints[2], controlPoints[3])
+      drawBezier2(controlPoints[0], controlPoints[1], controlPoints[2]);
       controlPoints =[]
     }
   })
