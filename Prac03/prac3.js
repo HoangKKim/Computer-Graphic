@@ -1,6 +1,9 @@
 var canvas = document.getElementById('gl_Canvas');
 var gl = canvas.getContext('webgl');  
+
 var pointColor = '(0,0,0,0)' 
+var controlPoints = [];
+var controlPointsColor = '(0.3,0.5,0.2,1)'
 
 // base code
 function createShader(gl, type, source) {
@@ -132,51 +135,104 @@ function enterInput(choose) {
   }
 }
 
-var recPointArr = [];
-var startEndPoint = [];
-var fourPoints = [];
-var cPoints = [];
-var controlPoints = [{x: 100, y: 100}, {x:150, y:50}, {x:250, y:150}, {x:300, y:100}]
+
 
 function drawBezier( p0, p1, p2, p3) {
-    var A3x = 3 * (p1.x - p0.x);
-    var A2x = 3 * (p2.x - p1.x) - A3x;
-    var A0x = p3.x - p0.x -A3x - A2x;
-    console.log(p0, p1, p2, p3)
-    var A3y = 3 * (p1.y - p0.y);
-    var A2y = 3 * (p2.y - p1.y) - A3y;
-    var A0y = p3.y - p0.y -A3y - A2y;
 
-    for(let i=0; i<1 ; i += .02) {
-        var x = (A0x * Math.pow(i, 3)) + (A2x * Math.pow(i, 2)) + (A3x * i) + p0.x;
-        var y = (A0y * Math.pow(i, 3)) + (A2y * Math.pow(i, 2)) + (A3y * i) + p0.y;
-        // console.log(x,y);
-        if ( x < Math.min(controlPoints[0].x, controlPoints[1].x, controlPoints[2].x, controlPoints[3].x) 
-	        || x > Math.max(controlPoints[0].x, controlPoints[1].x, controlPoints[2].x, controlPoints[3].x) 
-	        || y < Math.min(controlPoints[0].y, controlPoints[1].y, controlPoints[2].y, controlPoints[3].y) 
-	        || y > Math.max(controlPoints[0].y, controlPoints[1].y, controlPoints[2].y, controlPoints[3].y)) {
-            continue;
-        } else {
-            // console.log(x,y)
-            cPoints.push({x,y});
-            putPixel(x,y,pointColor);
-            // cPoints.push(y);
-        }
+  // calc initial value
+  var A0x = - (p0.x - 3*p1.x + 3*p2.x - p3.x);
+  var A1x = 3 * (p0.x - 2*p1.x + p2.x);
+  var A2x = -3 * p0.x + 3 * p1.x;
+    
+  var A0y = - (p0.y - 3*p1.y + 3*p2.y - p3.y);
+  var A1y = 3 * (p0.y - 2*p1.y + p2.y);
+  var A2y = -3 * p0.y + 3 * p1.y;
+  
+  var Mx = 7*Math.abs(A0x) + 3*Math.abs(A1x) + Math.abs(A2x);
+  var My = 7*Math.abs(A0y) + 3*Math.abs(A1y) + Math.abs(A2y);
+
+  var Dt = Math.pow(Math.max(Mx, My), -1);
+  
+  var Dx = A0x * Math.pow(Dt, 3) + A1x * Math.pow(Dt, 2) + A2x * Dt;
+  var Ddx = 6 * A0x * Math.pow(Dt, 3) + 2 *A1x * Math.pow(Dt,2);
+  var Dddx = 6 * A0x * Math.pow(Dt, 3);
+  
+  var Dy = A0y * Math.pow(Dt, 3) + A1y * Math.pow(Dt, 2) + A2y * Dt;
+  var Ddy = 6 * A0y * Math.pow(Dt, 3) + 2 *A1y * Math.pow(Dt,2);
+  var Dddy = 6 * A0y * Math.pow(Dt, 3);
+
+  // calc step
+  var steps = Math.round(1/Dt);
+  console.log(steps)
+
+  var x = p0.x;
+  var y = p0.y;
+
+  // plot first point
+  putPixel(x,y, pointColor);
+
+  // sai phan tien 
+  x += Dx;
+  y += Dy;
+  Dx += Ddx;
+  Dy += Ddy;
+  putPixel(Math.round(x), Math.round(y), pointColor);
+  
+  var pre = [Math.round(x), Math.round(y)]
+  for(let i=2; i<=steps; i++) {
+    x += Dx;
+    y += Dy;
+    
+    Dx += Ddx;
+    Ddx += Dddx;
+
+    Dy += Ddy;
+    Ddy += Dddy;
+
+    // han che viec ve lai cac diem da co tren luoi toa do
+    if(pre[0] == Math.round(x) && pre[1] ==  Math.round(y)) {
+      continue;
+    } else {
+      putPixel(Math.round(x), Math.round(y), pointColor);
+      pre = [Math.round(x), Math.round(y)];
     }
-    // return cPoints;
+
+  }  
+  putPixel(p3.x, p3.y, controlPointsColor);
 }
 
-
+// var times = 1;
 function main() {
   let canvasElem = document.querySelector("canvas");
   clearGL([0,0,0,1], 0, 0, canvas.width, canvas.height);  
-  
-  
-  for(let i=0; i<controlPoints.length; i++){
-    putPixel(controlPoints[i].x, controlPoints[i].y, '(1,0,0,1)');
-  }  
-  drawBezier(controlPoints[0], controlPoints[1], controlPoints[2], controlPoints[3]);
-  console.log(cPoints);
+
+  // drawBezier({x: 229, y:241}, {x: 264, y:149}, {x: 445, y:146}, {x: 519, y:258} )
+  var [preX, preY] = []
+  canvasElem.addEventListener("mousedown", function(e) {
+    clearGL([0,0,0,1], 0, 0, canvas.width, canvas.height);  
+
+    if(controlPoints.length<4){
+      var [curX,curY] = getMousePosition(canvasElem, e);
+      controlPoints.push({x: curX,y: curY});
+      console.log('cur: ', curX, curY);
+    } 
+    [preX,preY] = [curX,curY] ;
+
+    // enough required points
+    if(controlPoints.length==4) {
+      for(let i=0; i<controlPoints.length; i++){
+        putPixel(controlPoints[i].x,controlPoints[i].y,controlPointsColor);
+      }
+      drawBezier(controlPoints[0], controlPoints[1], controlPoints[2], controlPoints[3])
+      controlPoints =[]
+    }
+  })
+
+  // for(let i=0; i<controlPoints.length; i++){
+  //   putPixel(controlPoints[i].x, controlPoints[i].y, '(1,0,0,1)');
+  // }  
+  // drawBezier(controlPoints[0], controlPoints[1], controlPoints[2], controlPoints[3]);
+  // console.log(cPoints);
 
 
 //   let task = parseInt(window.prompt("Please enter the task number: (1, 2, 3, or 4)"
