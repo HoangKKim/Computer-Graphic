@@ -3,7 +3,7 @@ var gl = canvas.getContext('webgl');
 
 var pointColor = '(0,0,0,0)' 
 var controlPoints = [];
-var controlPointsColor = '(0.3,0.5,0.2,1)'
+var controlPointsColor = '(0.3,0.5,0.2,1)';
 
 // base code
 function createShader(gl, type, source) {
@@ -137,7 +137,7 @@ function enterInput(choose) {
 
 
 
-function drawBezier( p0, p1, p2, p3) {
+function drawBezier4Points( p0, p1, p2, p3) {
 
   // calc initial value
   var A0x = - (p0.x - 3*p1.x + 3*p2.x - p3.x);
@@ -171,7 +171,7 @@ function drawBezier( p0, p1, p2, p3) {
   // plot first point
   putPixel(x,y, pointColor);
 
-  // sai phan tien 
+  // forward difference
   x += Dx;
   y += Dy;
   Dx += Ddx;
@@ -189,7 +189,7 @@ function drawBezier( p0, p1, p2, p3) {
     Dy += Ddy;
     Ddy += Dddy;
 
-    // han che viec ve lai cac diem da co tren luoi toa do
+    // prevent from re-drawing existed points 
     if(pre[0] == Math.round(x) && pre[1] ==  Math.round(y)) {
       continue;
     } else {
@@ -197,12 +197,11 @@ function drawBezier( p0, p1, p2, p3) {
       pre = [Math.round(x), Math.round(y)];
     }
   }  
+  // plot the last control point
   putPixel(p3.x, p3.y, controlPointsColor);
 }
 
-
-// draw for 3 control points
-function drawBezier2( p0, p1, p2) {
+function drawBezier3Points( p0, p1, p2) {
 
   // calc initial value
   var A0x = p0.x - 2 * p1.x + p2.x;
@@ -231,10 +230,10 @@ function drawBezier2( p0, p1, p2) {
   var x = p0.x;
   var y = p0.y;
 
-  // plot first point
+  // plot the first point
   putPixel(x,y, pointColor);
 
-  // sai phan tien 
+  // forward difference
   // x += Dx;
   // y += Dy;
   putPixel(Math.round(x), Math.round(y), pointColor);
@@ -248,7 +247,7 @@ function drawBezier2( p0, p1, p2) {
 
     Dy += Ddy;
 
-    // han che viec ve lai cac diem da co tren luoi toa do
+    // prevent from re-drawing existed points 
     if(pre[0] == Math.round(x) && pre[1] ==  Math.round(y)) {
       continue;
     } else {
@@ -256,104 +255,210 @@ function drawBezier2( p0, p1, p2) {
       pre = [Math.round(x), Math.round(y)];
     }
   }  
+  // plot the last control point
   putPixel(p2.x, p2.y, pointColor);
 }
 
-// var times = 1;
+function buildEquations(xs, ys) {
+    const Npoints = xs.length;
+    const Npolys = Npoints - 1;
+    const Ncoeffs = 4 * Npolys;
+
+    let A = [];
+    for (let i = 0; i < Ncoeffs; i++) {
+        A.push(Array(Ncoeffs).fill(0));
+    }
+
+    let b = Array(Ncoeffs).fill(0);
+
+    let nrow = 0;
+    for (let i = 0; i < Npolys; i++, nrow += 2) {
+        A[nrow][4 * i] = xs[i] ** 3;
+        A[nrow][4 * i + 1] = xs[i] ** 2;
+        A[nrow][4 * i + 2] = xs[i];
+        A[nrow][4 * i + 3] = 1;
+        b[nrow] = ys[i];
+
+        A[nrow + 1][4 * i] = xs[i + 1] ** 3;
+        A[nrow + 1][4 * i + 1] = xs[i + 1] ** 2;
+        A[nrow + 1][4 * i + 2] = xs[i + 1];
+        A[nrow + 1][4 * i + 3] = 1;
+        b[nrow + 1] = ys[i + 1];
+    }
+
+    for (let i = 0; i < Npolys - 1; i++, nrow++) {
+        A[nrow][4 * i] = 3 * xs[i + 1] ** 2;
+        A[nrow][4 * i + 1] = 2 * xs[i + 1];
+        A[nrow][4 * i + 2] = 1;
+        A[nrow][4 * (i + 1)] = -3 * xs[i + 1] ** 2;
+        A[nrow][4 * (i + 1) + 1] = -2 * xs[i + 1];
+        A[nrow][4 * (i + 1) + 2] = -1;
+    }
+
+    for (let i = 0; i < Npolys - 1; i++, nrow++) {
+        A[nrow][4 * i] = 6 * xs[i + 1];
+        A[nrow][4 * i + 1] = 2;
+        A[nrow][4 * (i + 1)] = -6 * xs[i + 1];
+        A[nrow][4 * (i + 1) + 1] = -2;
+    }
+
+    A[nrow][0] = 6 * xs[0];
+    A[nrow][1] = 2;
+    A[nrow + 1][4 * (Npolys - 1)] = 6 * xs[Npolys];
+    A[nrow + 1][4 * (Npolys - 1) + 1] = 2;
+
+    return [A, b];
+}
+
+function preDrawSpline() {
+  var xs = [];
+  var ys = [];
+
+  // get xs, ys from control points
+  for(let i=0; i<controlPoints.length; i++) {
+    xs.push(controlPoints[i].x);
+    ys.push(controlPoints[i].y);    
+  }
+
+  // find a,b,c,d of equations
+  var [matA, b] = buildEquations(xs, ys);
+  var inverseMatA = math.inv(matA);
+  var matCoef = math.multiply(inverseMatA, b);
+  
+  var index =0
+  var ps = [];
+  ps.push([]);
+  // divide a,b,c,d of each equation into each []
+  for (let i=0; i<matCoef.length; i++){
+    if(i%4==0 && i!=0) {
+      ps.push([])
+      index++;
+    }
+    ps[index].push(matCoef[i]);
+  }
+  return ps;
+}
+
+function drawSplineCurve(ps) {
+  for (let i = 0; i < ps.length; i++) 
+  {  
+    var preX,preY ;
+    if(controlPoints[i].x <= controlPoints[i+1].x) {    // in case x increase uniformly
+      for (let x = controlPoints[i].x; x <= controlPoints[i+1].x; x += 0.1) 
+      {
+        var y = ps[i][0] * Math.pow(x, 3) + ps[i][1] * Math.pow(x, 2) + ps[i][2] * x + ps[i][3];
+        
+        // prevent from re-drawing existed points 
+        if(preX == Math.round(x) && preY == Math.round(y)) {
+          continue;
+        } else {
+          putPixel(Math.round(x), Math.round(y), pointColor);
+          preX = Math.round(x);
+          preY = Math.round(y);
+        }
+      }
+    } 
+    else {  //in case x decrease uniformly
+      for (let x = controlPoints[i].x; x >= controlPoints[i+1].x; x -= 0.1) 
+      {
+        var y = ps[i][0] * Math.pow(x, 3) + ps[i][1] * Math.pow(x, 2) + ps[i][2] * x + ps[i][3];
+        
+        // prevent from re-drawing existed points 
+        if(preX == Math.round(x) && preY == Math.round(y)) {
+          continue;
+        } else {
+          putPixel(Math.round(x), Math.round(y), pointColor);
+          preX = Math.round(x);
+          preY = Math.round(y);
+        }
+      }
+    }
+  }	
+}
+
+// ------------------------------ main ---------------------------------
 function main() {
   let canvasElem = document.querySelector("canvas");
   clearGL([0,0,0,1], 0, 0, canvas.width, canvas.height);  
 
-  // drawBezier({x: 229, y:241}, {x: 264, y:149}, {x: 445, y:146}, {x: 519, y:258} )
-  var [preX, preY] = []
-  canvasElem.addEventListener("mousedown", function(e) {
-    clearGL([0,0,0,1], 0, 0, canvas.width, canvas.height);  
+  // display prompt for user to select task
+  let task = parseInt(window.prompt("Please enter the task number: (1 or 2)"
+                      + "\n" + "1. Bezier curves" 
+                      + "\n" + "2. Spline curves"
+                      + "\n" + "Reload to choose another task!"))
+  
+  switch (task) {
+    case 1:   // draw bezier curves
+      // enter number of control points
+      var numControlPoints = parseInt(window.prompt("Please enter number of control points: (3 or 4)"));
+      var [preX, preY] = []
 
-    if(controlPoints.length<4){
-      var [curX,curY] = getMousePosition(canvasElem, e);
-      controlPoints.push({x: curX,y: curY});
-      console.log('cur: ', curX, curY);
-    } 
-    [preX,preY] = [curX,curY] ;
+      canvasElem.addEventListener("mousedown", function(e) {
+        clearGL([0,0,0,1], 0, 0, canvas.width, canvas.height);    
+        if(controlPoints.length < numControlPoints){
+          var [curX,curY] = getMousePosition(canvasElem, e);
+          controlPoints.push({x: curX,y: curY});
+          console.log('cur: ', curX, curY);
+        } 
+        [preX,preY] = [curX,curY] ; 
 
-    // enough required points
-    if(controlPoints.length==3) {
-      for(let i=0; i<controlPoints.length; i++){
-        putPixel(controlPoints[i].x,controlPoints[i].y,controlPointsColor);
-      }
-      drawBezier2(controlPoints[0], controlPoints[1], controlPoints[2]);
-      controlPoints =[]
-    }
-  })
+        // enough required points
+        if(numControlPoints == 3) {   
+          // mark the control points
+          for(let i = 0; i < controlPoints.length; i++){
+            putPixel(controlPoints[i].x, controlPoints[i].y, controlPointsColor);
+          }
+          // draw bezier
+          drawBezier3Points(controlPoints[0], controlPoints[1], controlPoints[2]);
+          controlPoints =[]
+        } 
+        else if(numControlPoints == 4) {
+          for(let i = 0; i < controlPoints.length; i++){
+            putPixel(controlPoints[i].x,controlPoints[i].y,controlPointsColor);
+          }
+          // draw bezier
+          drawBezier4Points(controlPoints[0], controlPoints[1], controlPoints[2], controlPoints[3]);
+          controlPoints =[]
+        }
+      })
+      break;
 
-  // for(let i=0; i<controlPoints.length; i++){
-  //   putPixel(controlPoints[i].x, controlPoints[i].y, '(1,0,0,1)');
-  // }  
-  // drawBezier(controlPoints[0], controlPoints[1], controlPoints[2], controlPoints[3]);
-  // console.log(cPoints);
+    default:    // draw spline curves
+      // enter number of control points
+      var numControlPoints = parseInt(window.prompt("Please enter number of control points: "));
+      console.log(numControlPoints);
 
+      // alert about property of this function
+      window.alert("This function will run properly in case: " 
+                    + "\n" + "- x increses uniformly" 
+                    + "\n" + "OR" 
+                    + "\n" + "- x decreses unifomrly")
+      var [preX, preY] = []
+      var count = 0;
 
-//   let task = parseInt(window.prompt("Please enter the task number: (1, 2, 3, or 4)"
-//                       + "\n" + "1.Line" 
-//                       + "\n" + "2.Ellipse"
-//                       + "\n" + "3.Parabola"
-//                       + "\n" + "4.Hyperbola"));
+      canvasElem.addEventListener("mousedown", function(e) {
+        clearGL([0,0,0,1], 0, 0, canvas.width, canvas.height);  
 
-//   console.log(task)
-//   switch (task) {
-//     case 1:
-//       var count=0;
-//       var [preX, preY] = []
-//       canvasElem.addEventListener("mousedown", function(e)
-//       {
-//         var [curX, curY] = getMousePosition(canvasElem,e);
-//         console.log('cur: ', curX, curY);
-//         count++;
-//         if(count==2) {
-//           console.log('1: ', preX, preY);
-//           console.log('2: ', curX, curY);
-//           clearGL([0,0,0,1], 0, 0, canvas.width, canvas.height);
-//           drawMidPoint(preX, preY, curX, curY);
-//           count=0;
-//         }
-//         [preX, preY] = [curX, curY];
-//       })    
-//       break;
+        if(controlPoints.length < numControlPoints){
+          var [curX,curY] = getMousePosition(canvasElem, e);
+          controlPoints.push({x: curX,y: curY});
+          console.log('cur: ', curX, curY);
+          count++;
+        } 
+        [preX,preY] = [curX,curY] ;
 
-//     case 2: 
-//       canvasElem.addEventListener("mousedown", function(e)
-//       {
-//         var [xCenter, yCenter] = getMousePosition(canvasElem,e);
-//         console.log('center: ', xCenter, yCenter);
-//         clearGL([0,0,0,1], 0, 0, canvas.width, canvas.height);
-//         var [longR,shortR]=enterInput(1);
-//         drawEllipse(longR, shortR, xCenter, yCenter);
-//       })    
-//       break;
-    
-//     case 3: 
-//       canvasElem.addEventListener("mousedown", function(e)
-//       {
-//         var [xCenter, yCenter] = getMousePosition(canvasElem,e);
-//         console.log('center: ', xCenter, yCenter);
-//         clearGL([0,0,0,1], 0, 0, canvas.width, canvas.height);
-//         var a = enterInput(2);
-//         drawParabola(xCenter, yCenter, a);
-//       })  
-//       break;
-//     default:
-//       console.log('rec: ',task);
-//       canvasElem.addEventListener("mousedown", function(e)
-//       {
-//         var [xCenter, yCenter] = getMousePosition(canvasElem,e);
-//         console.log('center: ', xCenter, yCenter);
-//         clearGL([0,0,0,1], 0, 0, canvas.width, canvas.height);
-//         var [a,b] = enterInput(3);
-//         console.log('a,b: ',a,b)
-//         drawHyperbola(xCenter, yCenter, a, b);
-//       })
-//       break;
-//   }
+        if(numControlPoints == controlPoints.length) {
+          for(let i = 0; i < controlPoints.length; i++){
+            putPixel(controlPoints[i].x, controlPoints[i].y, controlPointsColor);
+          }
+
+          var ps = preDrawSpline();
+          drawSplineCurve(ps);
+          controlPoints = [];
+        }
+      })
+      break;
+  }
 };
 
 main()
